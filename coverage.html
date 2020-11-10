@@ -1,0 +1,612 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">k8s.io/sample-controller/controller.go (28.6%)</option>
+				
+				<option value="file1">k8s.io/sample-controller/main.go (9.5%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">/*
+Copyright 2017 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package main
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        appsv1 "k8s.io/api/apps/v1"
+        corev1 "k8s.io/api/core/v1"
+        "k8s.io/apimachinery/pkg/api/errors"
+        metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+        utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+        "k8s.io/apimachinery/pkg/util/wait"
+        appsinformers "k8s.io/client-go/informers/apps/v1"
+        "k8s.io/client-go/kubernetes"
+        "k8s.io/client-go/kubernetes/scheme"
+        typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
+        appslisters "k8s.io/client-go/listers/apps/v1"
+        "k8s.io/client-go/tools/cache"
+        "k8s.io/client-go/tools/record"
+        "k8s.io/client-go/util/workqueue"
+        "k8s.io/klog/v2"
+
+        samplev1alpha1 "k8s.io/sample-controller/pkg/apis/samplecontroller/v1alpha1"
+        clientset "k8s.io/sample-controller/pkg/generated/clientset/versioned"
+        samplescheme "k8s.io/sample-controller/pkg/generated/clientset/versioned/scheme"
+        informers "k8s.io/sample-controller/pkg/generated/informers/externalversions/samplecontroller/v1alpha1"
+        listers "k8s.io/sample-controller/pkg/generated/listers/samplecontroller/v1alpha1"
+)
+
+const controllerAgentName = "sample-controller"
+
+const (
+        // SuccessSynced is used as part of the Event 'reason' when a Foo is synced
+        SuccessSynced = "Synced"
+        // ErrResourceExists is used as part of the Event 'reason' when a Foo fails
+        // to sync due to a Deployment of the same name already existing.
+        ErrResourceExists = "ErrResourceExists"
+
+        // MessageResourceExists is the message used for Events when a resource
+        // fails to sync due to a Deployment already existing
+        MessageResourceExists = "Resource %q already exists and is not managed by Foo"
+        // MessageResourceSynced is the message used for an Event fired when a Foo
+        // is synced successfully
+        MessageResourceSynced = "Foo synced successfully"
+)
+
+// Controller is the controller implementation for Foo resources
+type Controller struct {
+        // kubeclientset is a standard kubernetes clientset
+        kubeclientset kubernetes.Interface
+        // sampleclientset is a clientset for our own API group
+        sampleclientset clientset.Interface
+
+        deploymentsLister appslisters.DeploymentLister
+        deploymentsSynced cache.InformerSynced
+        foosLister        listers.FooLister
+        foosSynced        cache.InformerSynced
+
+        // workqueue is a rate limited work queue. This is used to queue work to be
+        // processed instead of performing it as soon as a change happens. This
+        // means we can ensure we only process a fixed amount of resources at a
+        // time, and makes it easy to ensure we are never processing the same item
+        // simultaneously in two different workers.
+        workqueue workqueue.RateLimitingInterface
+        // recorder is an event recorder for recording Event resources to the
+        // Kubernetes API.
+        recorder record.EventRecorder
+}
+
+// NewController returns a new sample controller
+func NewController(
+        kubeclientset kubernetes.Interface,
+        sampleclientset clientset.Interface,
+        deploymentInformer appsinformers.DeploymentInformer,
+        fooInformer informers.FooInformer) *Controller <span class="cov8" title="1">{
+
+        // Create event broadcaster
+        // Add sample-controller types to the default Kubernetes Scheme so Events can be
+        // logged for sample-controller types.
+        utilruntime.Must(samplescheme.AddToScheme(scheme.Scheme))
+        klog.V(4).Info("Creating event broadcaster")
+        eventBroadcaster := record.NewBroadcaster()
+        eventBroadcaster.StartStructuredLogging(0)
+        eventBroadcaster.StartRecordingToSink(&amp;typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
+        recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
+
+        controller := &amp;Controller{
+                kubeclientset:     kubeclientset,
+                sampleclientset:   sampleclientset,
+                deploymentsLister: deploymentInformer.Lister(),
+                deploymentsSynced: deploymentInformer.Informer().HasSynced,
+                foosLister:        fooInformer.Lister(),
+                foosSynced:        fooInformer.Informer().HasSynced,
+                workqueue:         workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Foos"),
+                recorder:          recorder,
+        }
+
+        klog.Info("Setting up event handlers")
+        // Set up an event handler for when Foo resources change
+        fooInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+                AddFunc: controller.enqueueFoo,
+                UpdateFunc: func(old, new interface{}) </span><span class="cov0" title="0">{
+                        controller.enqueueFoo(new)
+                }</span>,
+        })
+        // Set up an event handler for when Deployment resources change. This
+        // handler will lookup the owner of the given Deployment, and if it is
+        // owned by a Foo resource will enqueue that Foo resource for
+        // processing. This way, we don't need to implement custom logic for
+        // handling Deployment resources. More info on this pattern:
+        // https://github.com/kubernetes/community/blob/8cafef897a22026d42f5e5bb3f104febe7e29830/contributors/devel/controllers.md
+        <span class="cov8" title="1">deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+                AddFunc: controller.handleObject,
+                UpdateFunc: func(old, new interface{}) </span><span class="cov0" title="0">{
+                        newDepl := new.(*appsv1.Deployment)
+                        oldDepl := old.(*appsv1.Deployment)
+                        if newDepl.ResourceVersion == oldDepl.ResourceVersion </span><span class="cov0" title="0">{
+                                // Periodic resync will send update events for all known Deployments.
+                                // Two different versions of the same Deployment will always have different RVs.
+                                return
+                        }</span>
+                        <span class="cov0" title="0">controller.handleObject(new)</span>
+                },
+                DeleteFunc: controller.handleObject,
+        })
+
+        <span class="cov8" title="1">return controller</span>
+}
+
+// Run will set up the event handlers for types we are interested in, as well
+// as syncing informer caches and starting workers. It will block until stopCh
+// is closed, at which point it will shutdown the workqueue and wait for
+// workers to finish processing their current work items.
+func (c *Controller) Run(threadiness int, stopCh &lt;-chan struct{}) error <span class="cov0" title="0">{
+        defer utilruntime.HandleCrash()
+        defer c.workqueue.ShutDown()
+
+        // Start the informer factories to begin populating the informer caches
+        klog.Info("Starting Foo controller")
+
+        // Wait for the caches to be synced before starting workers
+        klog.Info("Waiting for informer caches to sync")
+        if ok := cache.WaitForCacheSync(stopCh, c.deploymentsSynced, c.foosSynced); !ok </span><span class="cov0" title="0">{
+                return fmt.Errorf("failed to wait for caches to sync")
+        }</span>
+
+        <span class="cov0" title="0">klog.Info("Starting workers")
+        // Launch two workers to process Foo resources
+        for i := 0; i &lt; threadiness; i++ </span><span class="cov0" title="0">{
+                go wait.Until(c.runWorker, time.Second, stopCh)
+        }</span>
+
+        <span class="cov0" title="0">klog.Info("Started workers")
+        &lt;-stopCh
+        klog.Info("Shutting down workers")
+
+        return nil</span>
+}
+
+// runWorker is a long-running function that will continually call the
+// processNextWorkItem function in order to read and process a message on the
+// workqueue.
+func (c *Controller) runWorker() <span class="cov0" title="0">{
+        for c.processNextWorkItem() </span>{<span class="cov0" title="0">
+        }</span>
+}
+
+// processNextWorkItem will read a single work item off the workqueue and
+// attempt to process it, by calling the syncHandler.
+func (c *Controller) processNextWorkItem() bool <span class="cov0" title="0">{
+        obj, shutdown := c.workqueue.Get()
+
+        if shutdown </span><span class="cov0" title="0">{
+                return false
+        }</span>
+
+        // We wrap this block in a func so we can defer c.workqueue.Done.
+        <span class="cov0" title="0">err := func(obj interface{}) error </span><span class="cov0" title="0">{
+                // We call Done here so the workqueue knows we have finished
+                // processing this item. We also must remember to call Forget if we
+                // do not want this work item being re-queued. For example, we do
+                // not call Forget if a transient error occurs, instead the item is
+                // put back on the workqueue and attempted again after a back-off
+                // period.
+                defer c.workqueue.Done(obj)
+                var key string
+                var ok bool
+                // We expect strings to come off the workqueue. These are of the
+                // form namespace/name. We do this as the delayed nature of the
+                // workqueue means the items in the informer cache may actually be
+                // more up to date that when the item was initially put onto the
+                // workqueue.
+                if key, ok = obj.(string); !ok </span><span class="cov0" title="0">{
+                        // As the item in the workqueue is actually invalid, we call
+                        // Forget here else we'd go into a loop of attempting to
+                        // process a work item that is invalid.
+                        c.workqueue.Forget(obj)
+                        utilruntime.HandleError(fmt.Errorf("expected string in workqueue but got %#v", obj))
+                        return nil
+                }</span>
+                // Run the syncHandler, passing it the namespace/name string of the
+                // Foo resource to be synced.
+                <span class="cov0" title="0">if err := c.syncHandler(key); err != nil </span><span class="cov0" title="0">{
+                        // Put the item back on the workqueue to handle any transient errors.
+                        c.workqueue.AddRateLimited(key)
+                        return fmt.Errorf("error syncing '%s': %s, requeuing", key, err.Error())
+                }</span>
+                // Finally, if no error occurs we Forget this item so it does not
+                // get queued again until another change happens.
+                <span class="cov0" title="0">c.workqueue.Forget(obj)
+                klog.Infof("Successfully synced '%s'", key)
+                return nil</span>
+        }(obj)
+
+        <span class="cov0" title="0">if err != nil </span><span class="cov0" title="0">{
+                utilruntime.HandleError(err)
+                return true
+        }</span>
+
+        <span class="cov0" title="0">return true</span>
+}
+
+// syncHandler compares the actual state with the desired, and attempts to
+// converge the two. It then updates the Status block of the Foo resource
+// with the current status of the resource.
+func (c *Controller) syncHandler(key string) error <span class="cov8" title="1">{
+        // Convert the namespace/name string into a distinct namespace and name
+        namespace, name, err := cache.SplitMetaNamespaceKey(key)
+        if err != nil </span><span class="cov0" title="0">{
+                utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
+                return nil
+        }</span>
+
+        // Get the Foo resource with this namespace/name
+        <span class="cov8" title="1">foo, err := c.foosLister.Foos(namespace).Get(name)
+        if err != nil </span><span class="cov0" title="0">{
+                // The Foo resource may no longer exist, in which case we stop
+                // processing.
+                if errors.IsNotFound(err) </span><span class="cov0" title="0">{
+                        utilruntime.HandleError(fmt.Errorf("foo '%s' in work queue no longer exists", key))
+                        return nil
+                }</span>
+
+                <span class="cov0" title="0">return err</span>
+        }
+
+        <span class="cov8" title="1">deploymentName := foo.Spec.DeploymentName
+        if deploymentName == "" </span><span class="cov0" title="0">{
+                // We choose to absorb the error here as the worker would requeue the
+                // resource otherwise. Instead, the next time the resource is updated
+                // the resource will be queued again.
+                utilruntime.HandleError(fmt.Errorf("%s: deployment name must be specified", key))
+                return nil
+        }</span>
+
+        // Get the deployment with the name specified in Foo.spec
+        <span class="cov8" title="1">deployment, err := c.deploymentsLister.Deployments(foo.Namespace).Get(deploymentName)
+        // If the resource doesn't exist, we'll create it
+        if errors.IsNotFound(err) </span><span class="cov8" title="1">{
+                deployment, err = c.kubeclientset.AppsV1().Deployments(foo.Namespace).Create(context.TODO(), newDeployment(foo), metav1.CreateOptions{})
+        }</span>
+
+        // If an error occurs during Get/Create, we'll requeue the item so we can
+        // attempt processing again later. This could have been caused by a
+        // temporary network failure, or any other transient reason.
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // If the Deployment is not controlled by this Foo resource, we should log
+        // a warning to the event recorder and return error msg.
+        <span class="cov8" title="1">if !metav1.IsControlledBy(deployment, foo) </span><span class="cov0" title="0">{
+                msg := fmt.Sprintf(MessageResourceExists, deployment.Name)
+                c.recorder.Event(foo, corev1.EventTypeWarning, ErrResourceExists, msg)
+                return fmt.Errorf(msg)
+        }</span>
+
+        // If this number of the replicas on the Foo resource is specified, and the
+        // number does not equal the current desired replicas on the Deployment, we
+        // should update the Deployment resource.
+        <span class="cov8" title="1">if foo.Spec.Replicas != nil &amp;&amp; *foo.Spec.Replicas != *deployment.Spec.Replicas </span><span class="cov0" title="0">{
+                klog.V(4).Infof("Foo %s replicas: %d, deployment replicas: %d", name, *foo.Spec.Replicas, *deployment.Spec.Replicas)
+                deployment, err = c.kubeclientset.AppsV1().Deployments(foo.Namespace).Update(context.TODO(), newDeployment(foo), metav1.UpdateOptions{})
+        }</span>
+
+        // If an error occurs during Update, we'll requeue the item so we can
+        // attempt processing again later. This could have been caused by a
+        // temporary network failure, or any other transient reason.
+        <span class="cov8" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Finally, we update the status block of the Foo resource to reflect the
+        // current state of the world
+        <span class="cov8" title="1">err = c.updateFooStatus(foo, deployment)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">c.recorder.Event(foo, corev1.EventTypeNormal, SuccessSynced, MessageResourceSynced)
+        return nil</span>
+}
+
+func (c *Controller) updateFooStatus(foo *samplev1alpha1.Foo, deployment *appsv1.Deployment) error <span class="cov8" title="1">{
+        // NEVER modify objects from the store. It's a read-only, local cache.
+        // You can use DeepCopy() to make a deep copy of original object and modify this copy
+        // Or create a copy manually for better performance
+        fooCopy := foo.DeepCopy()
+        fooCopy.Status.AvailableReplicas = deployment.Status.AvailableReplicas
+        // If the CustomResourceSubresources feature gate is not enabled,
+        // we must use Update instead of UpdateStatus to update the Status block of the Foo resource.
+        // UpdateStatus will not allow changes to the Spec of the resource,
+        // which is ideal for ensuring nothing other than resource status has been updated.
+        _, err := c.sampleclientset.SamplecontrollerV1alpha1().Foos(foo.Namespace).Update(context.TODO(), fooCopy, metav1.UpdateOptions{})
+        return err
+}</span>
+
+// enqueueFoo takes a Foo resource and converts it into a namespace/name
+// string which is then put onto the work queue. This method should *not* be
+// passed resources of any type other than Foo.
+func (c *Controller) enqueueFoo(obj interface{}) <span class="cov0" title="0">{
+        var key string
+        var err error
+        if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil </span><span class="cov0" title="0">{
+                utilruntime.HandleError(err)
+                return
+        }</span>
+        <span class="cov0" title="0">c.workqueue.Add(key)</span>
+}
+
+// handleObject will take any resource implementing metav1.Object and attempt
+// to find the Foo resource that 'owns' it. It does this by looking at the
+// objects metadata.ownerReferences field for an appropriate OwnerReference.
+// It then enqueues that Foo resource to be processed. If the object does not
+// have an appropriate OwnerReference, it will simply be skipped.
+func (c *Controller) handleObject(obj interface{}) <span class="cov0" title="0">{
+        var object metav1.Object
+        var ok bool
+        if object, ok = obj.(metav1.Object); !ok </span><span class="cov0" title="0">{
+                tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+                if !ok </span><span class="cov0" title="0">{
+                        utilruntime.HandleError(fmt.Errorf("error decoding object, invalid type"))
+                        return
+                }</span>
+                <span class="cov0" title="0">object, ok = tombstone.Obj.(metav1.Object)
+                if !ok </span><span class="cov0" title="0">{
+                        utilruntime.HandleError(fmt.Errorf("error decoding object tombstone, invalid type"))
+                        return
+                }</span>
+                <span class="cov0" title="0">klog.V(4).Infof("Recovered deleted object '%s' from tombstone", object.GetName())</span>
+        }
+        <span class="cov0" title="0">klog.V(4).Infof("Processing object: %s", object.GetName())
+        if ownerRef := metav1.GetControllerOf(object); ownerRef != nil </span><span class="cov0" title="0">{
+                // If this object is not owned by a Foo, we should not do anything more
+                // with it.
+                if ownerRef.Kind != "Foo" </span><span class="cov0" title="0">{
+                        return
+                }</span>
+
+                <span class="cov0" title="0">foo, err := c.foosLister.Foos(object.GetNamespace()).Get(ownerRef.Name)
+                if err != nil </span><span class="cov0" title="0">{
+                        klog.V(4).Infof("ignoring orphaned object '%s' of foo '%s'", object.GetSelfLink(), ownerRef.Name)
+                        return
+                }</span>
+
+                <span class="cov0" title="0">c.enqueueFoo(foo)
+                return</span>
+        }
+}
+
+// newDeployment creates a new Deployment for a Foo resource. It also sets
+// the appropriate OwnerReferences on the resource so handleObject can discover
+// the Foo resource that 'owns' it.
+func newDeployment(foo *samplev1alpha1.Foo) *appsv1.Deployment <span class="cov8" title="1">{
+        labels := map[string]string{
+                "app":        "nginx",
+                "controller": foo.Name,
+        }
+        return &amp;appsv1.Deployment{
+                ObjectMeta: metav1.ObjectMeta{
+                        Name:      foo.Spec.DeploymentName,
+                        Namespace: foo.Namespace,
+                        OwnerReferences: []metav1.OwnerReference{
+                                *metav1.NewControllerRef(foo, samplev1alpha1.SchemeGroupVersion.WithKind("Foo")),
+                        },
+                },
+                Spec: appsv1.DeploymentSpec{
+                        Replicas: foo.Spec.Replicas,
+                        Selector: &amp;metav1.LabelSelector{
+                                MatchLabels: labels,
+                        },
+                        Template: corev1.PodTemplateSpec{
+                                ObjectMeta: metav1.ObjectMeta{
+                                        Labels: labels,
+                                },
+                                Spec: corev1.PodSpec{
+                                        Containers: []corev1.Container{
+                                                {
+                                                        Name:  "nginx",
+                                                        Image: "nginx:latest",
+                                                },
+                                        },
+                                },
+                        },
+                },
+        }
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">/*
+Copyright 2017 The Kubernetes Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package main
+
+import (
+        "flag"
+        "time"
+
+        kubeinformers "k8s.io/client-go/informers"
+        "k8s.io/client-go/kubernetes"
+        "k8s.io/client-go/tools/clientcmd"
+        "k8s.io/klog/v2"
+        // Uncomment the following line to load the gcp plugin (only required to authenticate against GKE clusters).
+        // _ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+
+        clientset "k8s.io/sample-controller/pkg/generated/clientset/versioned"
+        informers "k8s.io/sample-controller/pkg/generated/informers/externalversions"
+        "k8s.io/sample-controller/pkg/signals"
+)
+
+var (
+        masterURL  string
+        kubeconfig string
+)
+
+func main() <span class="cov0" title="0">{
+        klog.InitFlags(nil)
+        flag.Parse()
+
+        // set up signals so we handle the first shutdown signal gracefully
+        stopCh := signals.SetupSignalHandler()
+
+        cfg, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.Fatalf("Error building kubeconfig: %s", err.Error())
+        }</span>
+
+        <span class="cov0" title="0">kubeClient, err := kubernetes.NewForConfig(cfg)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.Fatalf("Error building kubernetes clientset: %s", err.Error())
+        }</span>
+
+        <span class="cov0" title="0">exampleClient, err := clientset.NewForConfig(cfg)
+        if err != nil </span><span class="cov0" title="0">{
+                klog.Fatalf("Error building example clientset: %s", err.Error())
+        }</span>
+
+        <span class="cov0" title="0">kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
+        exampleInformerFactory := informers.NewSharedInformerFactory(exampleClient, time.Second*30)
+
+        controller := NewController(kubeClient, exampleClient,
+                kubeInformerFactory.Apps().V1().Deployments(),
+                exampleInformerFactory.Samplecontroller().V1alpha1().Foos())
+
+        // notice that there is no need to run Start methods in a separate goroutine. (i.e. go kubeInformerFactory.Start(stopCh)
+        // Start method is non-blocking and runs all registered informers in a dedicated goroutine.
+        kubeInformerFactory.Start(stopCh)
+        exampleInformerFactory.Start(stopCh)
+
+        if err = controller.Run(2, stopCh); err != nil </span><span class="cov0" title="0">{
+                klog.Fatalf("Error running controller: %s", err.Error())
+        }</span>
+}
+
+func init() <span class="cov8" title="1">{
+        flag.StringVar(&amp;kubeconfig, "kubeconfig", "", "Path to a kubeconfig. Only required if out-of-cluster.")
+        flag.StringVar(&amp;masterURL, "master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
